@@ -2,7 +2,7 @@ use std::error::Error;
 use clap::{Parser, Subcommand, Args};
 use simple_logger::SimpleLogger;
 use log::info;
-use crate::import::import;
+use crate::import::Importer;
 
 mod import;
 mod sql;
@@ -61,7 +61,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
     info!("Initializing");
     match &cli.command {
-        Commands::Import(args) => import(args)?,
+        Commands::Import(args) => {
+            let mut importer = Importer::new();
+            importer.import(args)?
+        },
         Commands::Update(_) => todo!(),
     }
     info!("Done!");
