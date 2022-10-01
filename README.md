@@ -36,4 +36,4 @@ NOTE: Doesn't work against a host local PostgreSQL due to Docker network constra
 
 ### Running on Linux against PostgreSQL on localhost
 
-> docker run --network="host" -e URL="https://download.geofabrik.de/europe/andorra-latest.osm.pbf" -e CS="host=localhost user=postgres password=postgres dbname=osm" rosm
+> docker run --network="host" -e URL="https://download.geofabrik.de/europe/andorra-latest.osm.pbf" -e CS="host=localhost user=postgres password=postgres dbname=osm" bjornharrtell/rosm
