@@ -55,9 +55,10 @@ pub struct Bbox {
     ymax: f64,
 }
 
-fn bbox_contains(bbox: &Bbox, lon: f64, lat: f64) -> bool {
-    lon >= bbox.xmin && lon <= bbox.xmax &&
-    lat >= bbox.ymin && lat <= bbox.ymax
+enum BoundsType {
+    Bbox(Bbox),
+    Polygon(Vec<f64>),
+    None
 }
 
 trait Bounds {
@@ -65,7 +66,10 @@ trait Bounds {
 }
 
 impl Bounds for Bbox {
-    fn contains(&self, lon: f64, lat: f64) -> bool { bbox_contains(self, lon, lat) }
+    fn contains(&self, lon: f64, lat: f64) -> bool { 
+        lon >= self.xmin && lon <= self.xmax &&
+        lat >= self.ymin && lat <= self.ymax
+    }
 }
 
 impl Bounds for Vec<f64> {
@@ -96,6 +100,16 @@ impl Importer {
     pub fn import(&mut self, args: &Import) -> Result<(), Box<dyn Error>> {
         let cs = &args.connectionstring.as_str();
 
+        let bounds_type = if args.polygon.is_some() {
+            let p = parse_wkt(args.polygon.as_ref().unwrap().as_str());
+            BoundsType::Polygon(p)
+        } else if args.bbox.is_some() {
+            let e: Vec<f64> = args.bbox.as_ref().unwrap().split(",").map(|e| e.parse::<f64>().unwrap()).collect();
+            BoundsType::Bbox(Bbox { xmin: e[0], ymin: e[1], xmax: e[2], ymax: e[3] })
+        } else {
+            BoundsType::None
+        };
+
         info!("Creating schema");
         self.client.batch_execute(SCHEMA).unwrap();
 
@@ -117,37 +131,14 @@ impl Importer {
         let reader = ElementReader::from_path(path)?;
 
         info!("Reading {}", path);
-        if args.polygon.is_some() {
-            let p = parse_wkt(args.polygon.as_ref().unwrap().as_str());
-            reader.for_each(|element| {
-                match element {
-                    Element::DenseNode(dn) => self.write_dense_node(&mut nodes_writer, dn, &p).unwrap(),
-                    Element::Node(n) => self.write_node(&mut nodes_writer, n, &p).unwrap(),
-                    Element::Way(w) => self.write_way(&mut ways_writer, w).unwrap(),
-                    Element::Relation(r) => self.write_rel(&mut rels_writer, &mut rels_members_writer, r).unwrap(),
-                }
-            })?;
-        } else if args.bbox.is_some() {
-            let e: Vec<f64> = args.bbox.as_ref().unwrap().split(",").map(|e| e.parse::<f64>().unwrap()).collect();
-            let bbox = Bbox { xmin: e[0], ymin: e[1], xmax: e[2], ymax: e[3] };
-            reader.for_each(|element| {
-                match element {
-                    Element::DenseNode(dn) => self.write_dense_node(&mut nodes_writer, dn, &bbox).unwrap(),
-                    Element::Node(n) => self.write_node(&mut nodes_writer, n, &bbox).unwrap(),
-                    Element::Way(w) => self.write_way(&mut ways_writer, w).unwrap(),
-                    Element::Relation(r) => self.write_rel(&mut rels_writer, &mut rels_members_writer, r).unwrap(),
-                }
-            })?;
-        } else {
-            reader.for_each(|element| {
-                match element {
-                    Element::DenseNode(dn) => self.write_dense_node(&mut nodes_writer, dn, &true).unwrap(),
-                    Element::Node(n) => self.write_node(&mut nodes_writer, n, &true).unwrap(),
-                    Element::Way(w) => self.write_way(&mut ways_writer, w).unwrap(),
-                    Element::Relation(r) => self.write_rel(&mut rels_writer, &mut rels_members_writer, r).unwrap(),
-                }
-            })?;
-        };
+        match bounds_type {
+            BoundsType::Bbox(b) => 
+                reader.for_each(|e| self.write(e, &b, &mut nodes_writer, &mut ways_writer, &mut rels_writer, &mut rels_members_writer))?,
+            BoundsType::Polygon(p) =>
+                reader.for_each(|e| self.write(e, &p, &mut nodes_writer, &mut ways_writer, &mut rels_writer, &mut rels_members_writer))?,
+            BoundsType::None =>
+                reader.for_each(|e| self.write(e, &true, &mut nodes_writer, &mut ways_writer, &mut rels_writer, &mut rels_members_writer))?
+        }
         let nodes = nodes_writer.finish()?;
         let ways = ways_writer.finish()?;
         let rels = rels_writer.finish()?;
@@ -207,6 +198,20 @@ impl Importer {
         Ok(())
     }
 
+    fn write<T: Bounds>(&mut self, e: Element, b: &T,
+        nodes_writer: &mut BinaryCopyInWriter,
+        ways_writer: &mut BinaryCopyInWriter,
+        rels_writer: &mut BinaryCopyInWriter,
+        rels_members_writer: &mut BinaryCopyInWriter
+    ) {
+        match e {
+            Element::DenseNode(dn) => self.write_dense_node(nodes_writer, dn, b).unwrap(),
+            Element::Node(n) => self.write_node(nodes_writer, n, b).unwrap(),
+            Element::Way(w) => self.write_way(ways_writer, w).unwrap(),
+            Element::Relation(r) => self.write_rel(rels_writer, rels_members_writer, r).unwrap(),
+        }
+    }
+
     fn write_dense_node<T: Bounds>(&mut self, w: &mut BinaryCopyInWriter, dn: DenseNode, bounds: &T) -> Result<(), Box<dyn Error>> {
         let lon = dn.lon();
         let lat = dn.lat();
@@ -218,7 +223,6 @@ impl Importer {
         }
         Ok(())
     }
-
 
     fn write_way(&mut self, w: &mut BinaryCopyInWriter, way: Way) -> Result<(), Box<dyn Error>>  {
         let refs = way.refs().collect::<Vec<i64>>();
