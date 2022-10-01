@@ -1,0 +1,18 @@
+[package]
+name = "rosm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = "0.4.17"
+simple_logger = "2.3.0"
+postgres = { version = "0.19.4", features = ["with-serde_json-1"] }
+flate2 = { version = "1.0.24", features = ["zlib"], default-features = false }
+osmpbf = { version = "0.2.8", features = [] }
+serde_json = "1.0.85"
+clap = { version = "3.1.0", features = ["derive"] }
+wkt = "0.10.3"
+geo-types = "0.7.7"
+strum_macros = "0.24"
+strum = { version = "0.24", features = ["derive"] }
+convert_case = "0.6.0"
