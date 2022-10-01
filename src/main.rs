@@ -5,6 +5,7 @@ use log::info;
 use crate::import::Importer;
 
 mod bounds;
+mod import_write;
 mod import;
 mod osm;
 mod poly;
