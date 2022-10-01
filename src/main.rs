@@ -4,9 +4,11 @@ use simple_logger::SimpleLogger;
 use log::info;
 use crate::import::Importer;
 
+mod bounds;
 mod import;
-mod sql;
+mod osm;
 mod poly;
+mod sql;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]

@@ -3,8 +3,11 @@ use postgres::{Client, NoTls, binary_copy::BinaryCopyInWriter, types::Type};
 use osmpbf::{ElementReader, Element, DenseNode, Way, Node, Relation, TagIter, DenseTagIter};
 use log::info;
 use serde_json::Value;
-use crate::{poly::{parse_wkt, wn}, sql::{SCHEMA, CREATE_LINES, CREATE_POLYGONS, CREATE_POINTS}, Import};
-use strum_macros::EnumString;
+use crate::bounds::{BoundsType, Bbox, Bounds};
+use crate::osm::{MemberType, RelationType};
+use crate::Import;
+use crate::sql::{SCHEMA, CREATE_POINTS, CREATE_POLYGONS, CREATE_LINES};
+use crate::poly::parse_wkt;
 use std::str::FromStr;
 
 fn to_json_val_dti(it: DenseTagIter) -> Result<Option<Value>, Box<dyn Error>> {
@@ -16,8 +19,6 @@ fn to_json_val_dti(it: DenseTagIter) -> Result<Option<Value>, Box<dyn Error>> {
     }
 }
 
-
-
 fn to_json_val(it: TagIter) -> Result<Option<Value>, Box<dyn Error>> {
     if it.len() == 0 {
         Ok(None)
@@ -25,59 +26,6 @@ fn to_json_val(it: TagIter) -> Result<Option<Value>, Box<dyn Error>> {
         let tags: HashMap<&str, &str> = it.collect();
         Ok(Some(serde_json::to_value(tags)?))
     }
-}
-
-#[derive(EnumString)]
-enum RelationType {
-    Unknown = 1,
-    Multipolygon = 2,
-    Route = 3,
-    RouteMaster = 4,
-    Restriction = 5,
-    Boundary = 6,
-    PublicTransport = 7,
-    DestinationSign = 8,
-    Waterway = 9,
-    Enforcement = 10,
-    Connectivity = 11
-}
-
-enum MemberType {
-    Node = 1,
-    Way = 2,
-    Relation = 3,
-}
-
-pub struct Bbox {
-    xmin: f64,
-    ymin: f64,
-    xmax: f64,
-    ymax: f64,
-}
-
-enum BoundsType {
-    Bbox(Bbox),
-    Polygon(Vec<f64>),
-    None
-}
-
-trait Bounds {
-    fn contains(&self, lon: f64, lat: f64) -> bool;
-}
-
-impl Bounds for Bbox {
-    fn contains(&self, lon: f64, lat: f64) -> bool { 
-        lon >= self.xmin && lon <= self.xmax &&
-        lat >= self.ymin && lat <= self.ymax
-    }
-}
-
-impl Bounds for Vec<f64> {
-    fn contains(&self, lon: f64, lat: f64) -> bool { wn(self, lon, lat) != 0 }
-}
-
-impl Bounds for bool {
-    fn contains(&self, _lon: f64, _lat: f64) -> bool { true }
 }
 
 pub struct Importer {
