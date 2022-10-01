@@ -2,6 +2,7 @@
 
 OpenStreetMap to PostgreSQL import tool written in Rust.
 
+```
 Usage: rosm <COMMAND>
 
 Commands:
@@ -11,6 +12,7 @@ Commands:
 Options:
   -h, --help     Print help information
   -V, --version  Print version information
+```
 
 ## How to get
 
