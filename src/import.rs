@@ -77,28 +77,27 @@ impl Bounds for bool {
 }
 
 pub struct Importer {
+    client: Client,
     node_index: HashSet<i64>,
     way_index: HashSet<i64>
 }
 
 impl Importer {
-    pub fn new() -> Self {
-        Self {
+    pub fn new(args: &Import) -> Result<Self, Box<dyn Error>> {
+        let cs = &args.connectionstring.as_str();
+        let client = Client::connect(cs, NoTls)?;
+        Ok(Self {
+            client,
             node_index: HashSet::new(),
             way_index: HashSet::new()
-        }
+        })
     }
 
     pub fn import(&mut self, args: &Import) -> Result<(), Box<dyn Error>> {
-        //let denmark = "POLYGON ((7.87 54.69, 7.78 57.25, 9.63 58.08, 10.71 58.11, 12.05 56.69, 13.15 56.42, 14.2 55.47, 15.5 55.33, 15.28 54.64, 12.98 54.94, 12.29 54.35, 12.46 53.64, 11.41 53.42, 10.07 53.18, 8.78 53.52, 7.87 54.69))";
-        //let p = parse_wkt(denmark);
-
         let cs = &args.connectionstring.as_str();
 
-        let mut client = Client::connect(cs, NoTls)?;
-
         info!("Creating schema");
-        client.batch_execute(SCHEMA).unwrap();
+        self.client.batch_execute(SCHEMA).unwrap();
 
         let mut nodes_client = Client::connect(cs, NoTls)?;
         let mut ways_client = Client::connect(cs, NoTls)?;
@@ -108,8 +107,9 @@ impl Importer {
         let nodes_sink = nodes_client.copy_in("copy osm.nodes (id, lon, lat, tags) from stdin binary")?;
         let rels_sink = rels_client.copy_in("copy osm.rels (id, type_id, tags) from stdin binary")?;
         let rels_members_sink = rels_members_client.copy_in("copy osm.rels_members (rel_id, member_id, member_type_id, role, sequence_id) from stdin binary")?;
-        let mut ways_writer = BinaryCopyInWriter::new(ways_sink, &[Type::INT8, Type::INT8_ARRAY, Type::JSONB]);
+
         let mut nodes_writer = BinaryCopyInWriter::new(nodes_sink, &[Type::INT8, Type::FLOAT8, Type::FLOAT8, Type::JSONB]);
+        let mut ways_writer = BinaryCopyInWriter::new(ways_sink, &[Type::INT8, Type::INT8_ARRAY, Type::JSONB]);
         let mut rels_writer = BinaryCopyInWriter::new(rels_sink, &[Type::INT8, Type::INT2, Type::JSONB]);
         let mut rels_members_writer = BinaryCopyInWriter::new(rels_members_sink, &[Type::INT8, Type::INT8, Type::INT2, Type::TEXT, Type::INT4]);
 
@@ -158,48 +158,48 @@ impl Importer {
         info!("Imported {} rels_members", rels_members);
 
         info!("Creating rels index");
-        client.batch_execute("create index rels_type_idx on osm.rels (type_id)")?;
+        self.client.batch_execute("create index rels_type_idx on osm.rels (type_id)")?;
 
         info!("Analyzing nodes");
-        client.batch_execute("analyze osm.nodes")?;
+        self.client.batch_execute("analyze osm.nodes")?;
         info!("Analyzing ways");
-        client.batch_execute("analyze osm.ways")?;
+        self.client.batch_execute("analyze osm.ways")?;
         info!("Analyzing rels");
-        client.batch_execute("analyze osm.rels")?;
+        self.client.batch_execute("analyze osm.rels")?;
 
         // TODO: drop rels with unknown rel_refs
 
         info!("Creating nodes_points");
-        let nodes_points = client.execute(CREATE_POINTS, &[])?;
+        let nodes_points = self.client.execute(CREATE_POINTS, &[])?;
         info!("Created {} nodes_points", nodes_points);
         info!("Creating ways_lines");
-        let ways_lines = client.execute(CREATE_LINES, &[])?;
+        let ways_lines = self.client.execute(CREATE_LINES, &[])?;
         info!("Created {} ways_lines", ways_lines);
         info!("Creating ways_polygons from closed lines");
-        let ways_polygons = client.execute(CREATE_POLYGONS, &[])?;
+        let ways_polygons = self.client.execute(CREATE_POLYGONS, &[])?;
         info!("Created {} ways_polygons", ways_polygons);
 
         info!("Vacuum ways_lines");
-        client.batch_execute("vacuum full osm.ways_lines")?;
+        self.client.batch_execute("vacuum full osm.ways_lines")?;
 
         info!("Creating rels_members index");
-        client.batch_execute("create index rels_members_rel_id_member_id_member_type_idx on osm.rels_members (rel_id, member_id, member_type_id)")?;
+        self.client.batch_execute("create index rels_members_rel_id_member_id_member_type_idx on osm.rels_members (rel_id, member_id, member_type_id)")?;
         info!("Analyzing rels_members");
-        client.batch_execute("analyze osm.rels_members")?;
+        self.client.batch_execute("analyze osm.rels_members")?;
 
         info!("Creating points spatial index");
-        client.batch_execute("create index nodes_points_geom_idx on osm.nodes_points using gist(geom)")?;
+        self.client.batch_execute("create index nodes_points_geom_idx on osm.nodes_points using gist(geom)")?;
         info!("Creating lines spatial index");
-        client.batch_execute("create index ways_lines_geom_idx on osm.ways_lines using gist(geom)")?;
+        self.client.batch_execute("create index ways_lines_geom_idx on osm.ways_lines using gist(geom)")?;
         info!("Creating polygons spatial index");
-        client.batch_execute("create index ways_polygons_geom_idx on osm.ways_polygons using gist(geom)")?;
+        self.client.batch_execute("create index ways_polygons_geom_idx on osm.ways_polygons using gist(geom)")?;
 
         info!("Analyzing nodes_points");
-        client.batch_execute("analyze osm.nodes_points")?;
+        self.client.batch_execute("analyze osm.nodes_points")?;
         info!("Analyzing ways_lines");
-        client.batch_execute("analyze osm.ways_lines")?;
+        self.client.batch_execute("analyze osm.ways_lines")?;
         info!("Analyzing ways_polygons");
-        client.batch_execute("analyze osm.ways_polygons")?;
+        self.client.batch_execute("analyze osm.ways_polygons")?;
 
         //info!("Drop nodes, ways and rels");
         //client.batch_execute("drop table osm.nodes;drop table osm.ways;drop table osm.rels;")?;
