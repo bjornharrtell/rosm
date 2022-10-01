@@ -23,8 +23,8 @@ struct Cli {
 enum Commands {
     /// Import a OSM pbf file into PostgreSQL schema
     Import(Import),
-    /// Update an existing PostgreSQL schema
-    Update(Update)
+    // Update an existing PostgreSQL schema
+    //Update(Update)
 }
 
 #[derive(Args)]
@@ -52,12 +52,12 @@ pub struct Import {
     */
 }
 
-#[derive(Args)]
+/*#[derive(Args)]
 struct Update {
     /// Target PostgreSQL connection string
     #[clap(short, long)]
     connectionstring: Option<String>,
-}
+}*/
 
 fn main() -> Result<(), Box<dyn Error>> {
     SimpleLogger::new().env().init()?;
@@ -68,7 +68,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let mut importer = Importer::new(args)?;
             importer.import(args)?
         },
-        Commands::Update(_) => todo!(),
+        //Commands::Update(_) => todo!(),
     }
     info!("Done!");
     Ok(())

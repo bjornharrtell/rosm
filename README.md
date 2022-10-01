@@ -2,19 +2,31 @@
 
 OpenStreetMap to PostgreSQL import tool written in Rust.
 
-## How to run
+Usage: rosm <COMMAND>
+
+Commands:
+  import  Import a OSM pbf file into PostgreSQL schema
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help information
+  -V, --version  Print version information
+
+## How to get
 
 Requires [Rust](https://www.rust-lang.org/) or [Docker](#Docker).
 
-### localhost
+## Executing locally
+
+### Example for localhost
 
 > RUST_LOG=info cargo run --release -- import -i andorra-latest.osm.pbf -c "host=localhost user=postgres password=postgres dbname=osm"
 
-## Docker
+## Executing via Docker
 
 Read more about [Docker](https://www.docker.com/).
 
-### Running
+### How to run
 
 > docker run -e URL="URL to osm.pbf file" -e CS="PostgreSQL connection string" rosm
 
