@@ -4,8 +4,7 @@ use osmpbf::{Element, DenseNode, DenseTagIter, TagIter, Way, Node, Relation};
 use postgres::binary_copy::BinaryCopyInWriter;
 use serde_json::Value;
 
-use crate::{import::{Importer, ImportIndexes, ImportWriters}, bounds::Bounds, osm::{MemberType, RelationType}};
-
+use crate::{import::{Importer, ImportWriters}, bounds::Bounds, osm::{MemberType, RelationType}};
 
 fn to_json_val_dti(it: DenseTagIter) -> Result<Option<Value>, Box<dyn Error>> {
     if it.len() == 0 {
@@ -26,62 +25,61 @@ fn to_json_val(it: TagIter) -> Result<Option<Value>, Box<dyn Error>> {
 }
 
 impl Importer {
-    pub fn write<T: Bounds>(&self, e: Element, b: &T,
-        indexes: &mut ImportIndexes,
+    pub fn write<T: Bounds>(&mut self, e: Element, b: &T,
         writers: &mut ImportWriters,
     ) {
         match e {
-            Element::DenseNode(dn) => self.write_dense_node(indexes, &mut writers.nodes, dn, b).unwrap(),
-            Element::Node(n) => self.write_node(indexes, &mut writers.nodes, n, b).unwrap(),
-            Element::Way(w) => self.write_way(indexes, &mut writers.ways, w).unwrap(),
-            Element::Relation(r) => self.write_rel(indexes, &mut writers.rels, &mut writers.rels_members, r).unwrap(),
+            Element::DenseNode(dn) => self.write_dense_node(&mut writers.nodes, dn, b).unwrap(),
+            Element::Node(n) => self.write_node(&mut writers.nodes, n, b).unwrap(),
+            Element::Way(w) => self.write_way(&mut writers.ways, w).unwrap(),
+            Element::Relation(r) => self.write_rel(&mut writers.rels, &mut writers.rels_members, r).unwrap(),
         }
     }
 
-    pub fn write_dense_node<T: Bounds>(&self, indexes: &mut ImportIndexes, w: &mut BinaryCopyInWriter, dn: DenseNode, bounds: &T) -> Result<(), Box<dyn Error>> {
+    pub fn write_dense_node<T: Bounds>(&mut self, w: &mut BinaryCopyInWriter, dn: DenseNode, bounds: &T) -> Result<(), Box<dyn Error>> {
         let lon = dn.lon();
         let lat = dn.lat();
         if bounds.contains(lon, lat) {
             let id = dn.id();
-            indexes.nodes.insert(id);
+            self.nodes_index.insert(id);
             let tags = to_json_val_dti(dn.tags())?;
             w.write(&[&id, &lon, &lat, &tags])?;
         }
         Ok(())
     }
 
-    pub fn write_way(&self, indexes: &mut ImportIndexes, w: &mut BinaryCopyInWriter, way: Way) -> Result<(), Box<dyn Error>>  {
+    pub fn write_way(&mut self, w: &mut BinaryCopyInWriter, way: Way) -> Result<(), Box<dyn Error>>  {
         let refs = way.refs().collect::<Vec<i64>>();
-        if !refs.iter().any(|f| !indexes.nodes.contains(f)) {
+        if !refs.iter().any(|f| !self.nodes_index.contains(f)) {
             let id = way.id();
-            indexes.ways.insert(id);
+            self.ways_index.insert(id);
             let tags = to_json_val(way.tags())?;
             w.write(&[&id, &refs, &tags])?;
         }
         Ok(())
     }
 
-    pub fn write_node<T: Bounds>(&self, indexes: &mut ImportIndexes, w: &mut BinaryCopyInWriter, n: Node, bounds: &T) -> Result<(), Box<dyn Error>>  {
+    pub fn write_node<T: Bounds>(&mut self, w: &mut BinaryCopyInWriter, n: Node, bounds: &T) -> Result<(), Box<dyn Error>>  {
         let lon = n.lon();
         let lat = n.lat();
         if bounds.contains(lon, lat) {
             let id = n.id();
-            indexes.nodes.insert(id);
+            self.nodes_index.insert(id);
             let tags = to_json_val(n.tags())?;
             w.write(&[&n.id(), &lon, &lat, &tags])?;
         }
         Ok(())
     }
 
-    pub fn write_rel(&self, indexes: &mut ImportIndexes, rels_writer: &mut BinaryCopyInWriter, rels_members_writer: &mut BinaryCopyInWriter, r: Relation) -> Result<(), Box<dyn Error>> {
+    pub fn write_rel(&self, rels_writer: &mut BinaryCopyInWriter, rels_members_writer: &mut BinaryCopyInWriter, r: Relation) -> Result<(), Box<dyn Error>> {
         use convert_case::{Case, Casing};
         let id = r.id();
         let mut sequence_id = 0;
         for m in r.members() {
             let member_id = m.member_id;
             let rel_type = match m.member_type {
-                osmpbf::RelMemberType::Node => if !indexes.nodes.contains(&member_id) { return Ok(()) } else { MemberType::Node as i16 },
-                osmpbf::RelMemberType::Way => if !indexes.ways.contains(&member_id) { return Ok(()) } else { MemberType::Way as i16 },
+                osmpbf::RelMemberType::Node => if !self.nodes_index.contains(&member_id) { return Ok(()) } else { MemberType::Node as i16 },
+                osmpbf::RelMemberType::Way => if !self.ways_index.contains(&member_id) { return Ok(()) } else { MemberType::Way as i16 },
                 osmpbf::RelMemberType::Relation => MemberType::Relation as i16
             };
             // TODO: defer write to avoid writing anything when contains checks above detects unresolvable members

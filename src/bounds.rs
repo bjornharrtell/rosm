@@ -1,5 +1,7 @@
 use crate::poly::wn;
 
+
+#[derive(Clone)]
 pub struct Bbox {
     pub xmin: f64,
     pub ymin: f64,
@@ -7,6 +9,7 @@ pub struct Bbox {
     pub ymax: f64,
 }
 
+#[derive(Clone)]
 pub enum BoundsType {
     Bbox(Bbox),
     Polygon(Vec<f64>),

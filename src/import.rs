@@ -11,11 +11,8 @@ use crate::poly::parse_wkt;
 pub struct Importer {
     pub cs: String,
     pub bounds_type: BoundsType,
-}
-
-pub struct ImportIndexes {
-    pub nodes: HashSet<i64>,
-    pub ways: HashSet<i64>,
+    pub nodes_index: HashSet<i64>,
+    pub ways_index: HashSet<i64>,
 }
 
 pub struct ImportWriters<'a> {
@@ -74,11 +71,13 @@ impl Importer {
         };
         Ok(Self {
             cs,
-            bounds_type
+            bounds_type,
+            nodes_index: HashSet::new(),
+            ways_index: HashSet::new()
         })
     }
 
-    pub fn import(&self, args: &Import) -> Result<(), Box<dyn Error>> {
+    pub fn import(&mut self, args: &Import) -> Result<(), Box<dyn Error>> {
         info!("Creating schema");
         let mut client = Client::connect(self.cs.as_str(), NoTls)?;
         client.batch_execute(SCHEMA).unwrap();
@@ -86,22 +85,17 @@ impl Importer {
         let mut clients = ImportClients::new(self.cs.as_str())?;
         let mut writers = ImportWriters::new(&mut clients)?;
 
-        let mut indexes = ImportIndexes {
-            nodes: HashSet::new(),
-            ways: HashSet::new(),
-        };
-
         let path = &args.input;
         let reader = ElementReader::from_path(path)?;
 
         info!("Reading {}", path);
-        match &self.bounds_type {
+        match self.bounds_type.clone() {
             BoundsType::Bbox(b) =>
-                reader.for_each(|e| self.write(e, b, &mut indexes, &mut writers))?,
+                reader.for_each(|e| self.write(e, &b, &mut writers))?,
             BoundsType::Polygon(p) =>
-                reader.for_each(|e| self.write(e, p, &mut indexes, &mut writers))?,
+                reader.for_each(|e| self.write(e, &p, &mut writers))?,
             BoundsType::None =>
-                reader.for_each(|e| self.write(e, &true, &mut indexes, &mut writers))?
+                reader.for_each(|e| self.write(e, &true, &mut writers))?
         }
         let nodes = writers.nodes.finish()?;
         let ways = writers.ways.finish()?;
