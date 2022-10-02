@@ -25,12 +25,32 @@ pub struct ImportWriters<'a> {
     pub rels_members: BinaryCopyInWriter<'a>,
 }
 
+pub struct ImportClients {
+    pub main: Client,
+    pub nodes: Client,
+    pub ways: Client,
+    pub rels: Client,
+    pub rels_members: Client,
+}
+
+impl ImportClients {
+    fn new(cs: &str) -> Result<Self, Box<dyn Error>> {
+        Ok(Self {
+            main: Client::connect(cs, NoTls)?,
+            nodes: Client::connect(cs, NoTls)?,
+            ways: Client::connect(cs, NoTls)?,
+            rels: Client::connect(cs, NoTls)?,
+            rels_members: Client::connect(cs, NoTls)?,
+        })
+    }
+}
+
 impl<'a> ImportWriters<'a> {
-    fn new(nodes_client: &'a mut Client, ways_client: &'a mut Client, rels_client: &'a mut Client, rels_members_client: &'a mut Client) -> Result<Self, Box<dyn Error>> {
-        let ways_sink = ways_client.copy_in("copy osm.ways (id, refs, tags) from stdin binary")?;
-        let nodes_sink = nodes_client.copy_in("copy osm.nodes (id, lon, lat, tags) from stdin binary")?;
-        let rels_sink = rels_client.copy_in("copy osm.rels (id, type_id, tags) from stdin binary")?;
-        let rels_members_sink = rels_members_client.copy_in("copy osm.rels_members (rel_id, member_id, member_type_id, role, sequence_id) from stdin binary")?;
+    fn new(clients: &'a mut ImportClients) -> Result<Self, Box<dyn Error>> {
+        let ways_sink = clients.ways.copy_in("copy osm.ways (id, refs, tags) from stdin binary")?;
+        let nodes_sink = clients.nodes.copy_in("copy osm.nodes (id, lon, lat, tags) from stdin binary")?;
+        let rels_sink = clients.rels.copy_in("copy osm.rels (id, type_id, tags) from stdin binary")?;
+        let rels_members_sink = clients.rels_members.copy_in("copy osm.rels_members (rel_id, member_id, member_type_id, role, sequence_id) from stdin binary")?;
         Ok(Self {
             nodes: BinaryCopyInWriter::new(nodes_sink, &[Type::INT8, Type::FLOAT8, Type::FLOAT8, Type::JSONB]),
             ways: BinaryCopyInWriter::new(ways_sink, &[Type::INT8, Type::INT8_ARRAY, Type::JSONB]),
@@ -63,11 +83,8 @@ impl Importer {
         let mut client = Client::connect(self.cs.as_str(), NoTls)?;
         client.batch_execute(SCHEMA).unwrap();
 
-        let mut nodes_client = Client::connect(self.cs.as_str(), NoTls)?;
-        let mut ways_client = Client::connect(self.cs.as_str(), NoTls)?;
-        let mut rels_client = Client::connect(self.cs.as_str(), NoTls)?;
-        let mut rels_members_client = Client::connect(self.cs.as_str(), NoTls)?;
-        let mut writers = ImportWriters::new(&mut nodes_client, &mut ways_client, &mut rels_client, &mut rels_members_client)?;
+        let mut clients = ImportClients::new(self.cs.as_str())?;
+        let mut writers = ImportWriters::new(&mut clients)?;
 
         let mut indexes = ImportIndexes {
             nodes: HashSet::new(),
