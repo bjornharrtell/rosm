@@ -65,7 +65,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     info!("Initializing");
     match &cli.command {
         Commands::Import(args) => {
-            let mut importer = Importer::new(args)?;
+            let importer = Importer::new(args)?;
             importer.import(args)?
         },
         //Commands::Update(_) => todo!(),
