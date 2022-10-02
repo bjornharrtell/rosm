@@ -4,7 +4,7 @@ use osmpbf::{Element, DenseNode, DenseTagIter, TagIter, Way, Node, Relation};
 use postgres::binary_copy::BinaryCopyInWriter;
 use serde_json::Value;
 
-use crate::{import::{Importer, ImportIndexes}, bounds::Bounds, osm::{MemberType, RelationType}};
+use crate::{import::{Importer, ImportIndexes, ImportWriters}, bounds::Bounds, osm::{MemberType, RelationType}};
 
 
 fn to_json_val_dti(it: DenseTagIter) -> Result<Option<Value>, Box<dyn Error>> {
@@ -28,16 +28,13 @@ fn to_json_val(it: TagIter) -> Result<Option<Value>, Box<dyn Error>> {
 impl Importer {
     pub fn write<T: Bounds>(&self, e: Element, b: &T,
         indexes: &mut ImportIndexes,
-        nodes_writer: &mut BinaryCopyInWriter,
-        ways_writer: &mut BinaryCopyInWriter,
-        rels_writer: &mut BinaryCopyInWriter,
-        rels_members_writer: &mut BinaryCopyInWriter
+        writers: &mut ImportWriters,
     ) {
         match e {
-            Element::DenseNode(dn) => self.write_dense_node(indexes, nodes_writer, dn, b).unwrap(),
-            Element::Node(n) => self.write_node(indexes, nodes_writer, n, b).unwrap(),
-            Element::Way(w) => self.write_way(indexes, ways_writer, w).unwrap(),
-            Element::Relation(r) => self.write_rel(indexes, rels_writer, rels_members_writer, r).unwrap(),
+            Element::DenseNode(dn) => self.write_dense_node(indexes, &mut writers.nodes, dn, b).unwrap(),
+            Element::Node(n) => self.write_node(indexes, &mut writers.nodes, n, b).unwrap(),
+            Element::Way(w) => self.write_way(indexes, &mut writers.ways, w).unwrap(),
+            Element::Relation(r) => self.write_rel(indexes, &mut writers.rels, &mut writers.rels_members, r).unwrap(),
         }
     }
 

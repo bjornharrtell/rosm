@@ -18,6 +18,28 @@ pub struct ImportIndexes {
     pub ways: HashSet<i64>,
 }
 
+pub struct ImportWriters<'a> {
+    pub nodes: BinaryCopyInWriter<'a>,
+    pub ways: BinaryCopyInWriter<'a>,
+    pub rels: BinaryCopyInWriter<'a>,
+    pub rels_members: BinaryCopyInWriter<'a>,
+}
+
+impl<'a> ImportWriters<'a> {
+    fn new(nodes_client: &'a mut Client, ways_client: &'a mut Client, rels_client: &'a mut Client, rels_members_client: &'a mut Client) -> Result<Self, Box<dyn Error>> {
+        let ways_sink = ways_client.copy_in("copy osm.ways (id, refs, tags) from stdin binary")?;
+        let nodes_sink = nodes_client.copy_in("copy osm.nodes (id, lon, lat, tags) from stdin binary")?;
+        let rels_sink = rels_client.copy_in("copy osm.rels (id, type_id, tags) from stdin binary")?;
+        let rels_members_sink = rels_members_client.copy_in("copy osm.rels_members (rel_id, member_id, member_type_id, role, sequence_id) from stdin binary")?;
+        Ok(Self {
+            nodes: BinaryCopyInWriter::new(nodes_sink, &[Type::INT8, Type::FLOAT8, Type::FLOAT8, Type::JSONB]),
+            ways: BinaryCopyInWriter::new(ways_sink, &[Type::INT8, Type::INT8_ARRAY, Type::JSONB]),
+            rels: BinaryCopyInWriter::new(rels_sink, &[Type::INT8, Type::INT2, Type::JSONB]),
+            rels_members: BinaryCopyInWriter::new(rels_members_sink, &[Type::INT8, Type::INT8, Type::INT2, Type::TEXT, Type::INT4])
+        })
+    }
+}
+
 impl Importer {
     pub fn new(args: &Import) -> Result<Self, Box<dyn Error>> {
         let cs = args.connectionstring.clone();
@@ -38,29 +60,19 @@ impl Importer {
 
     pub fn import(&self, args: &Import) -> Result<(), Box<dyn Error>> {
         info!("Creating schema");
-
         let mut client = Client::connect(self.cs.as_str(), NoTls)?;
+        client.batch_execute(SCHEMA).unwrap();
+
         let mut nodes_client = Client::connect(self.cs.as_str(), NoTls)?;
         let mut ways_client = Client::connect(self.cs.as_str(), NoTls)?;
         let mut rels_client = Client::connect(self.cs.as_str(), NoTls)?;
         let mut rels_members_client = Client::connect(self.cs.as_str(), NoTls)?;
-
-        client.batch_execute(SCHEMA).unwrap();
-
-        let ways_sink = ways_client.copy_in("copy osm.ways (id, refs, tags) from stdin binary")?;
-        let nodes_sink = nodes_client.copy_in("copy osm.nodes (id, lon, lat, tags) from stdin binary")?;
-        let rels_sink = rels_client.copy_in("copy osm.rels (id, type_id, tags) from stdin binary")?;
-        let rels_members_sink = rels_members_client.copy_in("copy osm.rels_members (rel_id, member_id, member_type_id, role, sequence_id) from stdin binary")?;
+        let mut writers = ImportWriters::new(&mut nodes_client, &mut ways_client, &mut rels_client, &mut rels_members_client)?;
 
         let mut indexes = ImportIndexes {
             nodes: HashSet::new(),
             ways: HashSet::new(),
         };
-
-        let mut nodes_writer = BinaryCopyInWriter::new(nodes_sink, &[Type::INT8, Type::FLOAT8, Type::FLOAT8, Type::JSONB]);
-        let mut ways_writer = BinaryCopyInWriter::new(ways_sink, &[Type::INT8, Type::INT8_ARRAY, Type::JSONB]);
-        let mut rels_writer = BinaryCopyInWriter::new(rels_sink, &[Type::INT8, Type::INT2, Type::JSONB]);
-        let mut rels_members_writer = BinaryCopyInWriter::new(rels_members_sink, &[Type::INT8, Type::INT8, Type::INT2, Type::TEXT, Type::INT4]);
 
         let path = &args.input;
         let reader = ElementReader::from_path(path)?;
@@ -68,16 +80,16 @@ impl Importer {
         info!("Reading {}", path);
         match &self.bounds_type {
             BoundsType::Bbox(b) =>
-                reader.for_each(|e| self.write(e, b, &mut indexes, &mut nodes_writer, &mut ways_writer, &mut rels_writer, &mut rels_members_writer))?,
+                reader.for_each(|e| self.write(e, b, &mut indexes, &mut writers))?,
             BoundsType::Polygon(p) =>
-                reader.for_each(|e| self.write(e, p, &mut indexes, &mut nodes_writer, &mut ways_writer, &mut rels_writer, &mut rels_members_writer))?,
+                reader.for_each(|e| self.write(e, p, &mut indexes, &mut writers))?,
             BoundsType::None =>
-                reader.for_each(|e| self.write(e, &true, &mut indexes, &mut nodes_writer, &mut ways_writer, &mut rels_writer, &mut rels_members_writer))?
+                reader.for_each(|e| self.write(e, &true, &mut indexes, &mut writers))?
         }
-        let nodes = nodes_writer.finish()?;
-        let ways = ways_writer.finish()?;
-        let rels = rels_writer.finish()?;
-        let rels_members = rels_members_writer.finish()?;
+        let nodes = writers.nodes.finish()?;
+        let ways = writers.ways.finish()?;
+        let rels = writers.rels.finish()?;
+        let rels_members = writers.rels_members.finish()?;
         info!("Imported {} nodes", nodes);
         info!("Imported {} ways", ways);
         info!("Imported {} rels", rels);
