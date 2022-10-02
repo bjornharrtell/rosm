@@ -9,29 +9,23 @@ pub fn wn(p: &Vec<f64>, x: f64, y: f64) -> i32 {
     }
     let mut wn = 0;
     for i in (0..p.len()-2).step_by(2) {
-        let ex1 = p[i];
-        let ey1 = p[i + 1];
-        let ex2 = p[i + 2];
-        let ey2 = p[i + 3];
-        if ey1 <= y {
-            if ey2 > y {
-                if is_left(ex1, ey1, ex2, ey2, x, y) > 0.0 {
-                    wn += 1;
-                }
+        let x1 = p[i];
+        let y1 = p[i + 1];
+        let x2 = p[i + 2];
+        let y2 = p[i + 3];
+        if y1 <= y {
+            if y2 > y && is_left(x1, y1, x2, y2, x, y) > 0.0 {
+                wn += 1;
             }
-        } else {
-            if ey2 <= y {
-                if is_left(ex1, ey1, ex2, ey2, x, y) < 0.0 {
-                    wn -= 1;
-                }
-            }
+        } else if y2 <= y && is_left(x1, y1, x2, y2, x, y) < 0.0 {
+            wn -= 1;
         }
     }
     wn
 }
 
 pub fn parse_wkt(wkt: &str) -> Vec<f64> {
-    use wkt::{TryFromWkt};
+    use wkt::TryFromWkt;
     use geo_types::Polygon;
     let p: Polygon<f64> = Polygon::try_from_wkt_str(wkt).unwrap();
     let cs: Vec<f64> = p.exterior().coords().flat_map(|c| [c.x, c.y]).collect();
