@@ -37,11 +37,11 @@ pub struct Import {
     #[clap(short, long)]
     connectionstring: String,
 
-    /// Filter by bbox (lat/lon comma separated)
+    /// Filter by bbox (lon/lat comma separated)
     #[clap(short, long)]
     bbox: Option<String>,
 
-    /// Filter by polygon (WKT, lat/lon)
+    /// Filter by polygon (WKT, lon/lat)
     #[clap(short, long)]
     polygon: Option<String>,
 
