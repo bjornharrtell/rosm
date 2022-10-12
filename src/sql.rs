@@ -63,22 +63,22 @@ create table osm.rels_members (
 drop table if exists osm.nodes_points;
 create table osm.nodes_points (
     id int8 primary key,
-    geom public.geometry(point,25832) not null
+    geom public.geometry(point,4326) not null
 );
 drop table if exists osm.ways_lines;
 create table osm.ways_lines (
     id int8 primary key,
-    geom public.geometry(linestring,25832) not null
+    geom public.geometry(linestring,4326) not null
 );
 drop table if exists osm.ways_polygons;
 create table osm.ways_polygons (
     id int8 primary key,
-    geom public.geometry(polygon,25832) not null
+    geom public.geometry(polygon,4326) not null
 );
 --drop table if exists osm.rels_multipolygons;
 --create table osm.rels_multipolygons (
 --    id int8 primary key,
---    geom public.geometry(multipolygon,25832) not null
+--    geom public.geometry(multipolygon,4326) not null
 --);
 create or replace view osm.v_nodes_points as
     select p.id, p.geom, n.tags
